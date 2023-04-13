@@ -19,6 +19,12 @@
         padding: 0 10px;
         box-sizing: border-box;
       }
+      .success {
+        background-color: rgba(0,255,0,0.3);
+      }
+      .error {
+        background-color: rgba(255,0,0,0.3);
+      }
     </style>
   </head>
   <body>
@@ -66,8 +72,22 @@
           <h2 class="text-center mb-4">Output</h2>
 
           <div class="mb-3">
+            <label class="form-label">sha256 (result)</label>
+            <input
+              :value="resultHash"
+              readonly="readonly"
+              class="form-control"
+              v-bind:class="{success: resultHash == verification, error: resultHash != verification}"
+            />
+          </div>
+          <div class="mb-3">
             <label class="form-label">sha256 (server seed)</label>
-            <input :value="resultHash" readonly="readonly" class="form-control" />
+            <input
+              :value="calculatedServerSeedHash"
+              readonly="readonly"
+              class="form-control"
+              v-bind:class="{success: calculatedServerSeedHash == serverSeedHash, error: calculatedServerSeedHash != serverSeedHash}"
+            />
           </div>
         </form>
 
@@ -97,6 +117,7 @@
     <script>
       const MIN_ROWS = 8;
       const MAX_LEFT_VALUE = 7;
+      const SALT = 'plinko-2ec44945-1da5-45d8-b759-6570d310b26f'
 
       function queryString() {
         return window.location.search
@@ -116,8 +137,10 @@
           return {
             clientSeed: qs.c || "",
             serverSeed: qs.s || "",
+            serverSeedHash: qs.h || "",
             rows: qs.r || MIN_ROWS,
             nonce: qs.n || "",
+            verification: qs.v || "",
           };
         },
         computed: {
@@ -126,6 +149,9 @@
           },
           resultHash() {
             return CryptoJS.SHA256(this.serverSeed + this.clientSeed + this.nonce);
+          },
+          calculatedServerSeedHash() {
+            return CryptoJS.SHA256(this.serverSeed + SALT);
           },
           directions() {
             let res = [];
