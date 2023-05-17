@@ -136,6 +136,13 @@
           </p>
         </div>
         <div class="field">
+          <label class="label">Server seed</label>
+          <p class="control has-icons-left">
+            <input class="input" type="text" id="server_seed_input" placeholder="Server seed)" />
+            <span class="icon is-small is-left"><i class="fa fa-key"></i></span>
+          </p>
+        </div>
+        <div class="field">
           <label class="label">Salt</label>
           <p class="control has-icons-left">
             <input class="input" type="text" id="game_salt_input" placeholder="Salt" />
@@ -189,20 +196,38 @@
 
         $("#game_hash_input").parent().addClass("is-loading");
         $("#game_verify_submit").addClass("is-loading");
-        $("#game_hash_input, #game_amount_input, #game_verify_submit").attr("disabled", "disabled");
+        $("#game_hash_input, #game_amount_input, #server_seed_input, #game_verify_submit").attr("disabled", "disabled");
         $("#game_verify_table").html("");
 
         let prevHash = null;
+        let lastServerSeed = $("#server_seed_input").val();
+        const salt = $("#game_salt_input").val();
+
+        function getPrevServerSeed(currentServerSeed) {
+          return CryptoJS.SHA256(currentServerSeed + salt).toString();
+        }
 
         for (let i = 0; i < $("#game_amount_input").val(); i++) {
-          let hash = String(prevHash ? CryptoJS.SHA256(String(prevHash)) : $("#game_hash_input").val());
-          let bust = gameResult(hash, $("#game_salt_input").val());
+          let hash = "";
+
+          if (prevHash) {
+            const prevServerSeed = getPrevServerSeed(lastServerSeed);
+            hash = String(CryptoJS.SHA256(prevServerSeed));
+            lastServerSeed = prevServerSeed;
+          } else {
+            hash = $("#game_hash_input").val();
+          }
+
+          let bust = gameResult(hash);
+
           setTimeout(function () {
             addTableRow(hash, bust, i);
           }, i * 1);
+
           prevHash = hash;
         }
       });
+
       $("#game_amount_input").on("keyup", () => {
         if ($("#game_amount_input").val() >= 10000) {
           if ($("#game_verify_warning").length) {
@@ -225,6 +250,7 @@
           }
         }
       });
+
       const addTableRow = (hash, bust, index) => {
         $("<tr/>")
           .attr({
@@ -243,32 +269,29 @@
         if (index >= $("#game_amount_input").val() - 1) {
           $("#game_hash_input").parent().removeClass("is-loading");
           $("#game_verify_submit").removeClass("is-loading");
-          $("#game_hash_input, #game_amount_input, #game_verify_submit").removeAttr("disabled");
+          $("#game_hash_input, #game_amount_input, #server_seed_input, #game_verify_submit").removeAttr("disabled");
+
           isVerifying = false;
         }
       };
+
       const gameResult = (seed, salt) => {
         const nBits = 52; // number of most significant bits to use
 
-        // 1. HMAC_SHA256(message=seed, key=salt)
-        if (salt) {
-          const hmac = CryptoJS.HmacSHA256(CryptoJS.enc.Hex.parse(seed), salt);
-          seed = hmac.toString(CryptoJS.enc.Hex);
-        }
-
-        // 2. r = 52 most significant bits
+        // 1. r = 52 most significant bits
         seed = seed.slice(0, nBits / 4);
         const r = parseInt(seed, 16);
 
-        // 3. X = r / 2^52
+        // 2. X = r / 2^52
         let X = r / Math.pow(2, nBits); // uniformly distributed in [0; 1)
         X = parseFloat(X.toPrecision(9));
 
-        // 4. X = 99 / (1-X)
+        // 3. X = 99 / (1-X)
         X = 99 / (1 - X);
 
-        // 5. return max(trunc(X), 100)
+        // 4. return max(trunc(X), 100)
         const result = Math.floor(X);
+
         return Math.max(1, result / 100);
       };
       $.fn.appendToWithIndex = function (to, index) {
@@ -282,9 +305,15 @@
           $(this).insertAfter(to.children().eq(index - 1));
         }
       };
+
       var hash_url = window.location.search;
       const query = new URLSearchParams(location.search);
       const salt = query.get("salt");
+      const serverSeed = query.get("serverSeed");
+
+      if (serverSeed) {
+        $("#server_seed_input").val(serverSeed);
+      }
 
       if (salt) {
         $("#game_salt_input").val(salt);
