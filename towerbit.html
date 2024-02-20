@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <title>TowerBit - Game Verification Script</title>
+    <link rel="stylesheet" href="./styles/bootstrap.min.css" />
+    <script src="./scripts/vue.min.js"></script>
+    <script src="./scripts/crypto-js.js"></script>
+    <style>
+        body {
+            overflow-y: scroll;
+        }
+        .main {
+            max-width: 800px;
+            width: 100%;
+            margin: 50px auto;
+            padding: 0 10px;
+            box-sizing: border-box;
+        }
+        .success {
+            background-color: rgba(0,255,0,0.3);
+        }
+        .error {
+            background-color: rgba(255,0,0,0.3);
+        }
+
+        .tower {
+            margin: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .tower > div {
+            display: flex;
+            gap: 6px;
+            justify-content: center;
+        }
+
+        .tower > div > div {
+            width: 80px;
+            height: 40px;
+            line-height: 40px;
+            text-align: center;
+            border-radius: 4px;
+            background: lightgray;
+        }
+
+        .tower > div > div.cross {
+            background: orange;
+        }
+    </style>
+</head>
+<body>
+<div id="app" class="main">
+    <h1 class="text-center mb-4">TowerBit - Game Verification Script</h1>
+
+    <hr />
+
+    <form class="my-5">
+        <h2 class="text-center">Input</h2>
+
+        <div class="mb-3">
+            <label class="form-label" for="difficulty">Difficulty</label>
+            <input id="difficulty" placeholder="Difficulty" v-model="difficulty" class="form-control" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="client-seed">Client seed</label>
+            <input id="client-seed" placeholder="Client seed" v-model="clientSeed" class="form-control" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="server-seed">Server seed</label>
+            <input id="server-seed" placeholder="Server seed" v-model="serverSeed" class="form-control" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="nonce">Nonce</label>
+            <input id="nonce" placeholder="Nonce" v-model="nonce" class="form-control" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label" for="salt">Salt</label>
+            <input id="salt" placeholder="Salt" v-model="salt" class="form-control" />
+        </div>
+    </form>
+
+    <div v-if="isOutputShowed">
+        <form class="my-5">
+            <h2 class="text-center mb-4">Output</h2>
+
+            <div class="mb-3">
+                <label class="form-label">sha256 (result)</label>
+                <input
+                        :value="calculatedResultHash"
+                        readonly="readonly"
+                        class="form-control"
+                        v-bind:class="{success: calculatedResultHash == resultHash, error: calculatedResultHash != resultHash}"
+                />
+            </div>
+            <div class="mb-3">
+                <label class="form-label">sha256 (server seed)</label>
+                <input
+                        :value="calculatedServerSeedHash"
+                        readonly="readonly"
+                        class="form-control"
+                        v-bind:class="{success: calculatedServerSeedHash == serverSeedHash, error: calculatedServerSeedHash != serverSeedHash}"
+                />
+            </div>
+        </form>
+
+        <div class="my-5">
+            <h2 class="text-center mb-4">Results</h2>
+
+            <div class="tower">
+                <div
+                    v-for="(row, rowIndex) in tower"
+                    :key="rowIndex"
+                >
+                    <div
+                        v-for="(isCross, index) in row"
+                        :key="rowIndex + '_' + index"
+                        :class="isCross ? 'cross' : ''"
+                    >{{ isCross ? '❌' : '💰'}}</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+  const ROWS_COUNT = 9;
+  const DIFFICULTY_PARAMS = {
+    EASY: {
+      cellsInRow: 4,
+      bitcoinsCount: 3,
+    },
+    MEDIUM: {
+      cellsInRow: 3,
+      bitcoinsCount: 2,
+    },
+    HARD: {
+      cellsInRow: 2,
+      bitcoinsCount: 1,
+    },
+    EXTREME: {
+      cellsInRow: 3,
+      bitcoinsCount: 1,
+    },
+    NIGHTMARE: {
+      cellsInRow: 4,
+      bitcoinsCount: 1,
+    },
+  }
+  function queryString() {
+    return window.location.search
+      .replace("?", "")
+      .split("&")
+      .reduce(function (res, item) {
+        let kv = item.split("=");
+        res[kv[0]] = kv[1];
+        return res;
+      }, {});
+  }
+
+  const qs = queryString();
+
+  const app = Vue.createApp({
+    data() {
+      return {
+        clientSeed: qs.c || "",
+        serverSeed: qs.s || "",
+        serverSeedHash: qs.h || "",
+        resultHash: qs.r || "",
+        nonce: qs.n || "",
+        salt: qs.sl || "",
+        difficulty: qs.d || "",
+      };
+    },
+    computed: {
+      isOutputShowed() {
+        return this.clientSeed && this.serverSeed && (this.nonce !== "") && this.salt && this.difficulty;
+      },
+      calculatedResultHash() {
+        return CryptoJS.SHA256(this.serverSeed + this.clientSeed + this.nonce);
+      },
+      calculatedServerSeedHash() {
+        return CryptoJS.SHA256(this.serverSeed + this.salt);
+      },
+      tower: function () {
+        if (!this.isOutputShowed) {
+          return []
+        }
+
+        let hashBits = this.fromHexToBinaryString(this.resultHash);
+        const { cellsInRow, bitcoinsCount } = DIFFICULTY_PARAMS[this.difficulty];
+
+
+        const result = [];
+
+        for (let currRowNum = 0; currRowNum < ROWS_COUNT; currRowNum++) {
+          const freeCellsOfRow = new Set();
+
+          for (let i = 0; i < cellsInRow; i++) {
+            freeCellsOfRow.add(i);
+          }
+
+          const minRandomBitsNeeded = Math.ceil(Math.log2(cellsInRow));
+          const actualRandomBitsUsed = Math.max(minRandomBitsNeeded, 32);
+
+          for (let i = 0; i < bitcoinsCount; i++) {
+
+            hashBits = hashBits.substring(minRandomBitsNeeded) + hashBits.substring(0, minRandomBitsNeeded);
+
+            const randomBits = hashBits.substring(0, actualRandomBitsUsed);
+            const randomLong = parseInt(randomBits, 2);
+            const divider = Math.pow(2, actualRandomBitsUsed);
+            const distributor = randomLong / divider;
+            const cell = Math.floor(distributor * freeCellsOfRow.size);
+
+            freeCellsOfRow.delete(cell);
+          }
+
+          const rowResult = [];
+
+          for (let i = 0; i < cellsInRow; i++) {
+            rowResult.push(freeCellsOfRow.has(i));
+          }
+
+          result.push(rowResult);
+        }
+
+        return result.reverse();
+      },
+    },
+    methods: {
+      fromHexToBinaryString(hex) {
+        return hex.split('').map(c => parseInt(c, 16).toString(2).padStart(4, '0')).join('')
+      },
+
+    },
+  });
+
+  app.mount("#app");
+</script>
+</body>
+</html>
