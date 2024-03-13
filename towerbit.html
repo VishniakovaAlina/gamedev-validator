@@ -121,10 +121,10 @@
                     :key="rowIndex"
                 >
                     <div
-                        v-for="(isCross, index) in row"
+                        v-for="(isMoney, index) in row"
                         :key="rowIndex + '_' + index"
-                        :class="isCross ? 'cross' : ''"
-                    >{{ isCross ? '❌' : '💰'}}</div>
+                        :class="isMoney ? '' :  'cross'"
+                    >{{ isMoney ? '💰' : '❌' }}</div>
                 </div>
             </div>
 
@@ -134,28 +134,14 @@
 
 <script>
   const ROWS_COUNT = 9;
-  const DIFFICULTY_PARAMS = {
-    EASY: {
-      cellsInRow: 4,
-      bitcoinsCount: 3,
-    },
-    MEDIUM: {
-      cellsInRow: 3,
-      bitcoinsCount: 2,
-    },
-    HARD: {
-      cellsInRow: 2,
-      bitcoinsCount: 1,
-    },
-    EXTREME: {
-      cellsInRow: 3,
-      bitcoinsCount: 1,
-    },
-    NIGHTMARE: {
-      cellsInRow: 4,
-      bitcoinsCount: 1,
-    },
-  }
+  const DIFFICULTY_VARIANTS = {
+    EASY: ['1110', '1101', '1011', '0111'],
+    MEDIUM: ['110', '101', '011'],
+    HARD: ['10', '01'],
+    EXTREME: ['100', '010', '001'],
+    NIGHTMARE: ['0001', '0010', '0100', '1000'],
+  };
+
   function queryString() {
     return window.location.search
       .replace("?", "")
@@ -196,52 +182,26 @@
           return []
         }
 
-        let hashBits = this.fromHexToBinaryString(this.resultHash);
-        const { cellsInRow, bitcoinsCount } = DIFFICULTY_PARAMS[this.difficulty];
+        const rowVariants = DIFFICULTY_VARIANTS[this.difficulty];
 
-
+        let hash = this.resultHash;
         const result = [];
 
         for (let currRowNum = 0; currRowNum < ROWS_COUNT; currRowNum++) {
-          const freeCellsOfRow = new Set();
+          hash = hash.substring(2) + hash.charAt(0) + hash.charAt(1);
+          const first8 = hash.substring(0, 8);
+          const int32 = parseInt(first8, 16);
+          const divider = 0x100000000;
+          const distributor = int32 / divider;
+          const variant = Math.floor(distributor * rowVariants.length);
 
-          for (let i = 0; i < cellsInRow; i++) {
-            freeCellsOfRow.add(i);
-          }
-
-          const minRandomBitsNeeded = Math.ceil(Math.log2(cellsInRow));
-          const actualRandomBitsUsed = Math.max(minRandomBitsNeeded, 32);
-
-          for (let i = 0; i < bitcoinsCount; i++) {
-
-            hashBits = hashBits.substring(minRandomBitsNeeded) + hashBits.substring(0, minRandomBitsNeeded);
-
-            const randomBits = hashBits.substring(0, actualRandomBitsUsed);
-            const randomLong = parseInt(randomBits, 2);
-            const divider = Math.pow(2, actualRandomBitsUsed);
-            const distributor = randomLong / divider;
-            const cell = Math.floor(distributor * freeCellsOfRow.size);
-
-            freeCellsOfRow.delete(cell);
-          }
-
-          const rowResult = [];
-
-          for (let i = 0; i < cellsInRow; i++) {
-            rowResult.push(freeCellsOfRow.has(i));
-          }
-
-          result.push(rowResult);
+          result.push(
+            rowVariants[variant].split('').map(Number).map(Boolean)
+          );
         }
 
         return result.reverse();
       },
-    },
-    methods: {
-      fromHexToBinaryString(hex) {
-        return hex.split('').map(c => parseInt(c, 16).toString(2).padStart(4, '0')).join('')
-      },
-
     },
   });
 
